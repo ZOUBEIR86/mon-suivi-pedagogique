@@ -1,0 +1,190 @@
+import streamlit as st
+import json
+import os
+
+# --- Configuration & Styling ---
+st.set_page_config(
+    page_title="Suivi Avancement Pédagogique",
+    page_icon="🎓",
+    layout="wide"
+)
+
+# Custom CSS for "Premium" look
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f8f9fa;
+    }
+    .stProgress > div > div > div > div {
+        background-image: linear-gradient(to right, #4facfe 0%, #00f2fe 100%);
+    }
+    .card {
+        background-color: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .metric-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    .metric-label {
+        color: #7f8c8d;
+        font-size: 0.9rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- Data Management ---
+DEFAULT_DATA = {
+    "Mathématiques": {
+        "chapters": [
+            {"name": "Chapitre 1: Algèbre Linéaire", "cours": "Non fait", "td": "Non fait", "tp": "Non fait"},
+            {"name": "Chapitre 2: Analyse Réelle", "cours": "Non fait", "td": "Non fait", "tp": "Non fait"},
+            {"name": "Chapitre 3: Probabilités", "cours": "Non fait", "td": "Non fait", "tp": "Non fait"},
+        ]
+    },
+    "Physique": {
+        "chapters": [
+            {"name": "Chapitre 1: Mécanique du Point", "cours": "Non fait", "td": "Non fait", "tp": "Non fait"},
+            {"name": "Chapitre 2: Thermodynamique", "cours": "Non fait", "td": "Non fait", "tp": "Non fait"},
+            {"name": "Chapitre 3: Électromagnétisme", "cours": "Non fait", "td": "Non fait", "tp": "Non fait"},
+        ]
+    },
+    "Informatique": {
+        "chapters": [
+            {"name": "Chapitre 1: Introduction à Python", "cours": "Non fait", "td": "Non fait", "tp": "Non fait"},
+            {"name": "Chapitre 2: Structures de Données", "cours": "Non fait", "td": "Non fait", "tp": "Non fait"},
+            {"name": "Chapitre 3: Algorithmes de Tri", "cours": "Non fait", "td": "Non fait", "tp": "Non fait"},
+        ]
+    }
+}
+
+STATUS_OPTIONS = ["Non fait", "En cours", "Fait"]
+STATUS_WEIGHTS = {"Non fait": 0.0, "En cours": 0.5, "Fait": 1.0}
+
+def init_session_state():
+    if "data" not in st.session_state:
+        st.session_state.data = DEFAULT_DATA
+
+def calculate_progress(subject_name):
+    chapters = st.session_state.data[subject_name]["chapters"]
+    total_score = 0
+    max_score = len(chapters) * 3 # 3 components: Cours, TD, TP
+    
+    for chap in chapters:
+        total_score += STATUS_WEIGHTS[chap["cours"]]
+        total_score += STATUS_WEIGHTS[chap["td"]]
+        total_score += STATUS_WEIGHTS[chap["tp"]]
+        
+    if max_score == 0:
+        return 0.0
+    
+    return min(1.0, total_score / max_score) # Return float 0.0 - 1.0
+
+# --- Views ---
+
+def show_dashboard():
+    st.title("🎓 Dashboard Global")
+    st.markdown("---")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    # Example metrics
+    total_subjects = len(st.session_state.data)
+    
+    # Calculate global completion
+    global_progress_sum = 0
+    for subj in st.session_state.data:
+        global_progress_sum += calculate_progress(subj)
+    global_avg = (global_progress_sum / total_subjects) * 100 if total_subjects else 0
+
+    with col1:
+        st.metric("Matières Suivies", total_subjects)
+    with col2:
+        st.metric("Progression Globale", f"{global_avg:.1f}%")
+    
+    st.markdown("### Progression par Matière")
+    
+    for subject_name in st.session_state.data:
+        progress = calculate_progress(subject_name)
+        st.markdown(f"**{subject_name}**")
+        st.progress(progress)
+        st.caption(f"Avancement: {progress*100:.1f}%")
+        st.markdown("<br>", unsafe_allow_html=True)
+
+def show_subject_detail():
+    st.title("📝 Vue Détail Matière")
+    
+    # Sidebar selection
+    subject_list = list(st.session_state.data.keys())
+    selected_subject = st.sidebar.selectbox("Choisir une matière", subject_list)
+    
+    st.header(f"Suivi: {selected_subject}")
+    
+    # Progress for this subject
+    progress = calculate_progress(selected_subject)
+    st.progress(progress)
+    st.info(f"Avancement actuel: **{progress*100:.1f}%**")
+    
+    st.markdown("---")
+    
+    chapters = st.session_state.data[selected_subject]["chapters"]
+    
+    for i, chapter in enumerate(chapters):
+        with st.expander(chapter["name"], expanded=True):
+            col_c, col_td, col_tp = st.columns(3)
+            
+            # Use unique keys for each widget to avoid conflicts
+            # We update session_state directly via on_change is tricky within loops without callbacks, 
+            # but binding `value` and reading it works in immediate mode apps like Streamlit 
+            # as long as we assign the result back to the data structure.
+            
+            with col_c:
+                new_cours = st.radio(
+                    "Cours (Théorie)", 
+                    STATUS_OPTIONS, 
+                    index=STATUS_OPTIONS.index(chapter["cours"]),
+                    key=f"{selected_subject}_{i}_cours",
+                    horizontal=True
+                )
+                chapter["cours"] = new_cours
+                
+            with col_td:
+                new_td = st.radio(
+                    "Travaux Dirigés (TD)", 
+                    STATUS_OPTIONS, 
+                    index=STATUS_OPTIONS.index(chapter["td"]),
+                    key=f"{selected_subject}_{i}_td",
+                    horizontal=True
+                )
+                chapter["td"] = new_td
+
+            with col_tp:
+                new_tp = st.radio(
+                    "Travaux Pratiques (TP)", 
+                    STATUS_OPTIONS, 
+                    index=STATUS_OPTIONS.index(chapter["tp"]),
+                    key=f"{selected_subject}_{i}_tp",
+                    horizontal=True
+                )
+                chapter["tp"] = new_tp
+
+# --- Main App ---
+
+def main():
+    init_session_state()
+    
+    # Sidebar Navigation
+    st.sidebar.title("Navigation")
+    view = st.sidebar.radio("Aller vers", ["Dashboard", "Détails Matière"])
+    
+    if view == "Dashboard":
+        show_dashboard()
+    else:
+        show_subject_detail()
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,13 @@
+streamlit
+pandas
+plotly
+passlib
+streamlit-option-menu
+streamlit-lottie
+requests
+bcrypt
+
+sqlalchemy
+
+
+plotly
